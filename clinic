@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+# One front door for every clinic action. Everything runs right here, where
+# prep.sh installed the toolchain (inside your container).
+#
+#   ./clinic unit common        ./clinic lint        ./clinic docs
+#   ./clinic shell              ./clinic preflight   ./clinic help
+
+set -euo pipefail
+KIT="$(cd "$(dirname "$0")" && pwd)"
+ART="$(cat "$KIT/.clinic-artifacts" 2>/dev/null || echo "")"
+ENVFILE="$HOME/.microceph-clinic.env"
+
+action="${1:-help}"; shift || true
+
+[ -f "$ENVFILE" ] || { echo "clinic: toolchain not set up. Run ~/microceph-artifacts/kit/prep.sh first." >&2; exit 2; }
+
+case "$action" in
+  preflight)
+    rc=0
+    "$KIT/scripts/preflight.sh" host "$KIT/microceph" "$ART" || rc=1
+    echo
+    ARTIFACTS="$ART" "$KIT/scripts/run.sh" preflight-env || rc=1
+    echo
+    if [ "$rc" = 0 ]; then echo "READY"; else echo "NOT READY  (see the FAIL lines above, each has a troubleshooting entry)"; fi
+    exit "$rc" ;;
+  shell)
+    # shellcheck disable=SC1090
+    cd "$KIT/microceph" && . "$ENVFILE" && exec bash ;;
+  *) ARTIFACTS="$ART" exec "$KIT/scripts/run.sh" "$action" "$@" ;;
+esac
